@@ -1,125 +1,122 @@
-# 论文与机器学习实验复现门禁
+# 论文、模型与 benchmark 复现
 
-本参考用于论文、深度学习模型和 benchmark 复现。目标是先证明环境与执行路径可用，再启动正式实验，避免“运行—报错—补包—继续正式跑”的循环。它不限定框架或论文；GPU、指标、数据集、模型权重等仅在目标实际需要时设为必需项。
+用于论文代码、深度学习模型、GPU 实验、benchmark、metrics、evaluator 和 ablation。把一次复现视为范围冻结、只读审计、验证、正式生成和独立评估组成的流程。不得把某个项目的参数或工具名写成所有项目的固定要求。
 
-## 阶段规则
+## 先冻结任务范围和指标
 
-按顺序执行 Stage 0–9。每个适用阶段记录 PASS 或 FAIL；只有目标确实不需要时才可标 N/A，并写明理由。缺少证据不能算 PASS。任一必需阶段失败，都不进入下一阶段的正式运行。
+在安装或实验前，确认并记录：
 
-| 阶段 | 通过条件 |
+- 用户要复现的结果/行为，以及明确不需要或排除的工作。
+- 论文、官方仓库、commit/tag、入口与目标表格/图/样本。
+- 指定的模型/backbone、checkpoint、实验组、样本、数据集或 evaluation set。
+- resolution、frames、steps、seed、guidance、算法参数。
+- 最终指标、reference protocol、evaluator 和最终产物。
+
+不能仅因论文包含多个模型/实验就全部运行。不能擅自添加 baseline、original、额外 backbone、benchmark、指标或 ablation。Baseline 只有在用户范围包含或目标协议需要时才纳入；若科学有效性似乎需要用户未指定的 baseline，先说明并确认是否扩展范围。用户明确排除的项目是硬约束；若排除项使某个比较/指标无法成立，应保留排除并报告该限制，不自行加跑。
+
+把最终表格或交付物需要的每项指标前置到 generation 规划，并反推其输入、reference、帧对齐、resize、normalization、aggregation、evaluator 版本和 runtime instrumentation。若 reference/evaluator 缺失或协议不确定，应在 generation 前报告，不能等生成后再发现指标不可算。将配置集中写入 experiment_manifest.yaml、config.yaml 或等价文件，避免依赖临时 shell export 或人工记忆。
+
+先判定项目是训练、微调、纯 inference 还是 training-free 方法。Training-free 任务通常需要 evaluation set/benchmark/input samples/reference，不要自动要求 training set。
+
+## 阶段门禁
+
+按顺序记录每个适用阶段的 PASS、FAIL 或带理由的 N/A。任何未知项不得视为 PASS。阶段名称可以按项目调整，但不得绕过硬门禁或改变用户冻结的范围。
+
+| 阶段 | 工作与通过条件 |
 |---|---|
-| 0. 论文与实验定义 | 确定官方论文/仓库/源码 commit、目标表格或行为、配置、输入、运行入口、成功证据和指标协议 |
-| 1. 资源预检 | 所需数据、checkpoint、evaluator 文件结构正确；磁盘、网络、硬件和驱动满足目标要求 |
-| 2. 官方依赖审计 | 汇总官方安装规格，已安装或计划安装的关键包均满足声明的版本范围 |
-| 3. 环境与深层导入 | 环境快照已保存；外部命令可用或已选 fallback；逐层 import 和关键模块检查通过 |
-| 4. 模型实例化 | 从项目配置构建目标 model/pipeline，或成功完成等价的“加载但不推理”流程 |
-| 5. 单样本 smoke test | baseline 单样本通过；目标方法单样本通过且核心机制有正向证据 |
-| 6. 正式 baseline | 官方 baseline/no-cache reference 按冻结配置完成，产物和记录完整 |
-| 7. Proposed method | 提出的方法正式运行成功，方法参数和核心机制证据已记录 |
-| 8. Metrics/evaluator | evaluator 的输入、reference protocol 和指标定义明确；只评估成功运行 |
-| 9. Ablation | baseline、proposed method 和 metrics pipeline 均稳定；代码与配置已冻结并可区分 |
+| 0. Scope/metric freeze | 用户范围、排除项、实验组、成功证据、所有指标及 evaluator/reference protocol 已写入 manifest |
+| 1. Read-only Preflight | 系统、Python、GPU/CUDA、依赖规格、extensions、checkpoint、数据、网络、磁盘、输出/日志/resume 条件已审计；首次审计不修改环境 |
+| 2. Error Audit | 当前所有错误、阻塞 warning 和缺项已提取，按共同根因与阻塞关系归组；一次性修复计划已形成 |
+| 3. Batched minimal repair | 只修复确认的问题；PASS 核心组件保持冻结；互不依赖的问题合并修复，遮蔽项明确分阶段 |
+| 4. Final validation/freeze | 官方版本范围、依赖、CUDA/native backend、checkpoint/data、load-only model/pipeline instantiate、输出、日志和恢复能力均通过；保存环境快照，设置 ENV_READY/READY_TO_RUN |
+| 5. Smoke test OR N/A | 用户未拒绝时按目标真实路径跑最小代表样本；用户明确拒绝时记录 N/A，并将首个正式样本事务化 |
+| 6. Scoped generation | 仅运行冻结范围中的实验组/样本；baseline/reference 仅在 scope 或协议要求时纳入；每个 sample 独立事务、持久记录、可恢复；昂贵 GPU 开始前 READY_FOR_PAID_GPU |
+| 7. Bundle validation/resume | 每个 SUCCESS/DONE 的 Evaluation Bundle 满足完整性判据；FAILED 项与 aggregate metrics 隔离，恢复时跳过有效 DONE |
+| 8. Evaluation/metrics | 只评估 SUCCESS bundle；按冻结的 reference protocol 在适当的 evaluator 环境执行，并保存可复跑评测记录 |
+| 9. Requested ablation/report | 仅运行用户要求或协议确实需要的 ablation；除被研究因素外保持条件一致，报告可追溯证据 |
 
-Stage 6–9 是正式实验阶段。Stage 0–5 通过前，不要启动正式 baseline、批量推理、指标汇总或 ablation。
+Stage 1 是只读阶段：禁止安装、升级、改配置、下载大文件或启动昂贵正式实验。此阶段需要审计每个新接入的大模型、world model、evaluator、benchmark、CUDA extension 的真实调用路径；不要只靠经验猜依赖。Stage 2 和 Stage 3 的细则见 [error-audit-and-recovery.md](error-audit-and-recovery.md)。
 
-## Stage 0：建立复现契约
+## Stage 1：目标相关只读预检
 
-先从论文、官方仓库和配置文件确认：
+检查范围由冻结的执行路径决定，记录目标不需要的项为 N/A：
 
-- 要复现的表格、图、行为或基线；官方实现的仓库、commit/tag 和入口。
-- 数据、checkpoint、evaluator、运行参数、随机种子、硬件要求及官方 reference。
-- 唯一成功证据，以及每项命令或阶段的预期输出、PASS/FAIL 条件和失败后是否停止。
-- baseline、proposed method、metrics 和 ablation 各自的运行范围。
+- **系统资源：**OS/kernel、CPU、RAM/swap、目标文件系统和磁盘空间。
+- **GPU/CUDA：**GPU 型号/专用显存、driver、CUDA runtime/toolkit、nvcc、CUDA_HOME、cuDNN（若需要）；检查 torch/torchvision/torchaudio、torch CUDA 和 CUDA availability。目标要求时做真实 CUDA tensor 运算，不只读版本字符串。
+- **Python 路径：**Python/Conda/pip 版本、当前 environment、python executable、site-packages、PATH、PYTHONPATH、LD_LIBRARY_PATH 等相关变量；不导出 secrets。
+- **官方依赖规格：**读取 requirements、environment.yml、pyproject、setup 配置、README、submodule、模型和 evaluator 的依赖；追踪真实 import/call path。
+- **CUDA/native extensions：**package 存在不等于 backend 可用。若路径调用 FlashAttention、xformers、DROID、lietorch、torch_scatter、custom op 等，检查编译产物、动态库加载及真实 backend/function 调用。
+- **模型与数据：**按执行路径检查 checkpoint、config、tokenizer、VAE、transformer、text encoder、adapter、scheduler、weight shards、evaluation samples、prompt、image/video、camera 和 benchmark/reference metadata 的存在、结构、权限与合理大小。
+- **运行基础设施：**目标输出目录可写；日志位置、cache/persistent disk、tmux/screen/job scheduler 和 resume 状态机制可用。
+- **下载条件：**检查目标路径、已有资源/cache、可用磁盘和官方源网络。网络探测与下载分开；有证据表明官方源不可达后再测允许的镜像。
 
-在正式实验前建立 experiment manifest。至少记录 experiment_id、method、sample/input、prompt（适用时）、seed、resolution、frames、steps、guidance、checkpoint、git commit、environment、algorithm parameters 和 start time。无法确定的值标为 unknown，不用论文表格中的结果替代本次运行记录。
+预检摘要应清楚给出适用项状态，并以 READY_TO_RUN=YES/NO 收尾，例如：
 
-## Stage 1：资源与主机预检
+    SYSTEM=PASS
+    GPU=PASS or N/A (reason)
+    CUDA=PASS or N/A (reason)
+    PYTHON=PASS
+    PYTORCH=PASS
+    DEPENDENCIES=PASS/FAIL
+    CUDA_EXTENSIONS=PASS/FAIL/N/A
+    CHECKPOINTS=PASS/FAIL/N/A
+    DATASET=PASS/FAIL/N/A
+    DISK=PASS/FAIL
+    OUTPUT=PASS/FAIL
+    LOGGER=PASS/FAIL
+    RESUME=PASS/FAIL
+    READY_TO_RUN=YES/NO
 
-检查目标项目路径中的数据、模型、权重分片、配置、tokenizer、benchmark 和 evaluator 文件是否已存在；按官方说明检查目录结构、必要文件和可校验信息。然后核对所需磁盘空间、网络来源、GPU/驱动/CUDA 及操作系统条件。只有目标依赖 GPU 时才要求 GPU 检查通过。
+所有必需项通过前不得开始正式昂贵 GPU 实验。CPU 任务不因无 GPU 被阻塞；GPU 任务不因版本显示正确而跳过实际 CUDA/backend 检查。
 
-下载前顺序：
+## Stage 2–4：审计、最小修复和冻结
 
-1. 检查目标路径、目录结构和必需文件。
-2. 检查目标磁盘空间。
-3. 单独测试官方来源网络；网络测试与实际下载分开。
-4. 官方来源失败后才测试允许的镜像，并保留失败证据。
-5. 使用支持续传的工具下载，校验文件完整性。
-6. 解压后重新检查预期文件和结构。
+先完整读取现有错误信息，再按共同根因修复；不要按报错行逐条补包。完整修复方案细则、分阶段条件、生成/评测环境隔离、日志和环境冻结见 [error-audit-and-recovery.md](error-audit-and-recovery.md)。
 
-全新实例声明仍按 Skill 主文件的快速模式处理：只检查项目目标路径和执行路径确实需要的主机条件，不扫描无关磁盘、全局缓存或完整系统状态。
+首次只读审计后，生成环境和 evaluation/benchmark 环境若依赖冲突或 evaluator 缺少额外组件，应分开管理（例如 model_gen_env 与 evaluator_env），不得为 evaluator 任意破坏已通过的生成环境。正式验证通过后记录 ENV_READY=YES 并冻结环境；以后只运行。遇到新错误时停止当前 run，收集日志，重新审计并计划针对性修复，再重新验证和更新快照。
 
-## Stage 2：官方依赖审计与安装
+保存与复现有关的快照：pip freeze、conda list（适用时）、environment.yml/lock、Python/Torch/CUDA/driver、关键依赖版本、git commit、checkpoint identifier。避免保存密钥或不必要的个人环境信息。环境变更后生成新的 final snapshot。
 
-安装前先阅读适用的官方 requirements.txt、pyproject.toml、environment.yml、setup.py/setup.cfg、README 安装说明、子模块和模型组件 requirements。建立一份依赖清单，涵盖目标执行路径、关键模块和 evaluator；标出 Python、PyTorch、CUDA、NumPy、OpenCV、Transformers、Diffusers、Accelerate 等关键包（只列本项目实际使用的项）。
+## Stage 4–5：Load-only 与可选 smoke test
 
-逐项确认当前版本满足官方约束范围。例如 numpy>=1.26.4,<2.0.0 要直接比较实际安装版本；pip check 通过不能代替范围核对或官方兼容性确认。把 pip check 当作一个检查项。
+Final validation/freeze 阶段按目标配置真实加载 checkpoint 和 model/pipeline；验证必需权重、components、device placement 和 evaluator 初始化（适用时）。这不是用 random weights 或 synthetic input 代替用户的真实模型实验。只有这些 load-only 检查通过，才能设置 ENV_READY=YES。
 
-缺依赖或遇到 ImportError 时，不要立刻单独安装报错包并重跑正式实验。返回依赖审计，确认该包属于哪个官方依赖，分析安装会否改变 NumPy、Torch、OpenCV 等关键版本；需要时用 constraints 锁住关键版本。安装后重新执行相关依赖审计、环境快照和 Deep Import Check，不能把安装成功视为 gate 通过。
+Smoke test 是降低风险的工具，不凌驾于用户的实验协议。若用户明确说不做 smoke test，Stage 5 记为 N/A (user explicitly declined)。仍须通过官方依赖/版本审计、load-only model validation、checkpoint/data validation、输出/log/resume validation。随后只把第一个正式样本作为事务式运行；该样本失败就停止，不启动剩余 batch。
 
-## Stage 3：环境快照、外部工具和 Deep Import Check
+若用户未拒绝 smoke test，使用能触达相同核心路径的真实最小输入。仅当不会改变目标行为时才缩小 resolution/frames/steps；不得换成随机权重、fake prompt、synthetic tensor 或另一种实现。Baseline/reference smoke test 只在冻结范围要求 baseline/reference 时运行。Proposed method 要有机制触发证据；如 cache hit/skip/prediction counters 或目标函数调用路径。
 
-正式 baseline 前保存 env_before.txt；依赖或系统环境变更后保存 env_final.txt。记录与目标相关的 Python、pip/conda、关键包版本、Torch 版本、Torch CUDA 版本、GPU 名称、driver、CUDA 是否可用；使用 Conda 时记录 conda list，使用 pip 时记录 pip freeze。避免导出或公开 token、密码和其他敏感环境变量。
+## Stage 7：Generation、evaluation bundle 与恢复
 
-按层验证导入，前一层通过后再继续：
+正式 generation 前，除 experiment manifest 外，为每个 sample/run 建立独立临时目录。每个 bundle 按目标需要保存：
 
-1. 基础包：如 torch、目标模型库和评估库。
-2. 项目模块：真实导入论文代码中的 utils、pipeline、模型、dataloader 等。
-3. adapter 和子组件：检查实际入口会加载的 adapter、custom op、evaluator 和相关模块。
-4. 从项目配置构造模型所需的模块/类；模型实例化本身留在 Stage 4。
+    sample_xxx/
+      output.mp4 or target output
+      frames/                 # evaluator needs them
+      input/ and input metadata
+      prompt/camera metadata  # when applicable
+      generation_config
+      algorithm_config
+      runtime_metrics.json
+      environment snapshot/reference
+      run.log
+      status.json
+      DONE or FAILED
 
-基础 import torch 或 import transformers 通过，不代表项目深层依赖可用。任何缺失都回到 Stage 2；不要边跑正式实验边补包。
+generation 只执行一次；后续 evaluator 可从 bundle 重复运行，不应重做 generation。
 
-脚本使用 time、ffmpeg、git、wget、curl、nvidia-smi、unzip、aria2c 等外部命令时，先用当前 shell 的等价命令检查其是否存在（Unix 可用 command -v，Windows PowerShell 可用 Get-Command）。缺少辅助命令时先选稳定的等价方案；计时可用应用内的单调时钟，不要默认 /usr/bin/time 一定存在。记录检查命令的预期输出、PASS/FAIL 和是否阻止后续阶段。
+每个 sample 独立处理：开始前检查有效 DONE；成功后验证并持久化产物，再写 DONE；失败写 FAILED、退出码、失败阶段和日志，不进入 aggregate metrics。恢复时跳过有效 DONE，只重试失败/不完整 sample。DONE 不只依据文件名：还要检查 exit_code=0、输出存在且大小合理、结构/帧数正确、metadata 和 runtime log 完整。
 
-## Stage 4：实例化模型或 pipeline
+在真实推理区间记录 inference start/end、latency、torch.cuda.max_memory_allocated/reserved、可用时 NVML peak memory、需要时 GPU utilization、GPU model、config 和 environment。失败初始化耗时不得计作 latency；不可测指标写 unavailable 和原因，不事后反推。
 
-使用正式配置和目标 checkpoint 执行真正的 config load 与 model/pipeline instantiate，或项目提供的等价“load model but no inference”路径。检查必要权重、组件、tokenizer、adapter 和 device placement 均已加载。只完成浅层 import 不算通过；实例化失败时归类为环境/依赖或模型/文件加载问题，不归因于算法效果。
+正式长任务必须在 tmux/screen、systemd-run、scheduler 或平台可靠 job system 等断连保护机制内运行，stdout/stderr 同时持久写磁盘。SSH/Jupyter/VS Code/browser session 断开后，任务和日志必须继续。安装、编译、下载、inference 和 evaluator 同样保留完整 stdout/stderr；排错优先读取完整日志，而非只看 traceback 最后几行。
 
-## Stage 5：单样本 smoke test
+在付费 GPU 实例启动前尽量完成读代码、scope/manifest、依赖审计、样本选择、指标协议、输出 schema、脚本、错误与恢复计划。昂贵 GPU 上只执行必须使用它的验证/运行。开机前 gate 使用 READY_FOR_PAID_GPU=YES/NO；NO 时先在非付费/本地阶段补齐可完成的工作。
 
-正式 N 样本运行前先跑 baseline/reference × 1。只有退出码为 0，输出文件存在且结构/帧数符合预期，必要日志和 metadata 存在，延迟与显存数据来自真实推理区间，且目标要求 GPU 时确认推理实际使用 GPU，才可通过。
+## Stage 8–9：评估与 Ablation
 
-随后用相同代表性输入跑 proposed method × 1。除上述条件外，还要用日志、计数器、instrumentation 或调用路径证明核心机制真正触发（例如 cache hit、skip 或 prediction path 大于零；以目标算法定义为准）。无触发证据就停止在 smoke test 阶段，不能开始批量方法实验。
+确认指标协议后再运行 evaluator。明确 reference 类型、配对、frame alignment、resize、normalization、aggregation、evaluator version、所需 frames/data 和输出格式。不要默认 PSNR/SSIM/LPIPS 是 generated-vs-original。reference 缺失时在 generation 前报告，标记相关指标 unavailable 和原因；禁止复制论文结果充当复现结果。
 
-## Stage 6–7：Baseline 与 proposed method 正式运行
+Ablation 只纳入已冻结范围内的项目。除研究因素外，尽量固定 backbone、checkpoint、环境、输入、seed、resolution、frames 和 steps。不同 ablation 不要另建整套大模型环境；只有代码结构确实要求独立环境时，先说明原因。Baseline 并非 ablation 的默认前提，只有 scope 或 reference protocol 要求才设置为 gate。
 
-先运行 official/original/no-cache baseline，再运行完整 proposed method。执行前冻结论文规定的参数、输入、seed 和代码 revision；若为复现诊断而要修改官方代码，先保留原始 commit 和 clean baseline，并把修改放在可追踪的 branch/worktree/patch 中。记录 baseline 与 modified code SHA，避免把实验性改动误认为官方实现。
-
-每个 run 使用独立临时目录，例如 runs/tmp/<experiment-id>/<run-id>，状态从 PENDING 开始。只有 exit_code == 0、期望产物及数量正确、必要 metadata/log 存在时，才能标记 SUCCESS 并进入 aggregate metrics。否则标记 FAILED，记录失败阶段、退出码和错误日志；失败 run 不得写入正式聚合指标。
-
-Latency 只记录成功推理阶段内实际测得的时间。模型初始化失败后耗时 4 秒等总运行时间不能作为 inference latency。显存和 GPU 指标也应在推理期间记录：按项目可用性保存 peak allocated/reserved、nvidia-smi 峰值或 GPU utilization，并说明测量方式；不可得时明确标注，不能事后反推。
-
-## Stage 8：Metrics 与 evaluator
-
-正式生成前定义要计算的指标、输入配对、预处理和 evaluator 版本。对于 PSNR、SSIM、LPIPS、WorldScore 等指标，先从论文或官方代码确认 reference protocol：例如 generated output 对 ground truth、cached output 对 no-cache output，或其他明确配对。将 metric_reference_type 和具体 reference 路径写入 metadata。
-
-reference 不存在或协议无法确认时，将相关指标标记为 unavailable 并记录原因。只把 SUCCESS run 输入 evaluator；严禁复制论文表格数值充作本次复现结果。
-
-## Stage 9：Ablation
-
-只有 baseline、proposed method 和 metrics pipeline 都稳定且结果记录完整后，才开始 ablation。先冻结当前代码与配置，记录 commit/hash，再通过明确的配置开关逐项改变实验因素。每个消融项写入独立 manifest/run，并说明相对完整方法改变了什么。Baseline 未成功或核心算法仍在修补时，先完成 clean baseline，不进入消融。
-
-## 统一 Preflight Gate 与错误分类
-
-正式 baseline 的 ALLOW_FORMAL_EXPERIMENT 只有在以下适用项全部通过时才可设为 TRUE：
-
-- [ ] Stage 0 的源码版本、配置、输入、成功证据和 manifest 已明确。
-- [ ] 所需文件、目录结构、磁盘和来源可用。
-- [ ] 目标需要的硬件、驱动和 CUDA 可用。
-- [ ] 官方依赖和版本范围满足；pip check 等辅助检查已记录。
-- [ ] 关键包版本与环境快照已保存。
-- [ ] 目标项目深层 import、外部命令或 fallback 均已验证。
-- [ ] 模型/pipeline instantiate 通过。
-- [ ] 输出目录可写，临时 run 和失败隔离规则已就绪。
-- [ ] baseline 单样本通过；将运行的算法方法单样本通过且机制已触发。
-
-对目标明确不需要的检查，记录 N/A 和理由。任一适用项失败或未知时保持 ALLOW_FORMAL_EXPERIMENT = FALSE。
-
-将问题明确归为以下一类并先在该层修复：
-
-- **环境/依赖问题：**版本不满足、系统命令缺失、CUDA/驱动/权限或资源不足。
-- **模型/文件加载问题：**checkpoint、配置、权重结构、组件或实例化失败。
-- **算法/代码问题：**在模型与输入已有效加载后，目标方法路径错误或机制未触发。
-- **实验结果问题：**运行有效且成功，但输出、指标或统计结果不满足论文判据。
-
-某一类问题的失败不能直接宣告另一类失败；每次修复后只重跑受影响的门禁，并按顺序恢复流程。
+每个命令都要给出目的、执行命令、验证命令、预期输出、PASS/FAIL 和失败是否阻塞下一步；分阶段提供彼此有依赖的命令，避免一次让用户盲跑大量步骤。最终报告源代码和环境版本、冻结范围、bundle/output 路径、指标/ref protocol、resume 状态和唯一成功证据。
 
