@@ -16,6 +16,8 @@ An adaptable Codex skill for reproducing actual code behavior with a minimal, ob
 
 完整操作规则见 [SKILL.md](SKILL.md)。依赖、输入和判据由每个任务的目标行为与核心代码决定；Skill 不携带项目源码、权重或数据集。
 
+论文与机器学习实验复现使用 [分阶段 Preflight 与实验门禁](references/paper-reproduction.md)：先完成官方依赖审计、深层导入和模型实例化，再做单样本 smoke test；只有通过后才运行正式 baseline、proposed method、metrics 和 ablation。失败 run 与失败初始化时间不会进入正式指标。
+
 ## 安装与使用
 
 将本文件夹放进 Codex 的 skills 目录：
